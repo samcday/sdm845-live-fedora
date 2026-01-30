@@ -3,6 +3,11 @@ set -ueo pipefail
 
 SRCDIR="${SRCDIR:-$PWD}"
 
+if [[ "${PROFILES:-}" == *"embedded-firmware"* ]] && [[ "${PROFILES:-}" == *"sdm845-fwload"* ]]; then
+    echo "Profiles embedded-firmware and sdm845-fwload are mutually exclusive." >&2
+    exit 1
+fi
+
 if [[ "${PROFILES:-}" == *"embedded-firmware"* ]]; then
     if [[ -d "${SRCDIR}/firmware-oneplus-sdm845/lib/firmware" ]]; then
         exit 0
