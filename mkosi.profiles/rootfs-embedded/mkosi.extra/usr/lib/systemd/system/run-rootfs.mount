@@ -1,8 +1,0 @@
-[Unit]
-After=modprobe@erofs.service
-Requires=modprobe@erofs.service
-
-[Mount]
-What=/rootfs.ero
-Where=/run/rootfs
-Type=erofs

@@ -1,8 +1,0 @@
-[Unit]
-After=rootfs-nbd.service modprobe@erofs.service
-Requires=rootfs-nbd.service modprobe@erofs.service
-
-[Mount]
-What=/dev/nbd0
-Where=/run/rootfs
-Type=erofs

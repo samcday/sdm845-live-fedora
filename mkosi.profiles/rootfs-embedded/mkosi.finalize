@@ -1,4 +1,0 @@
-#!/bin/bash
-set -uexo pipefail
-
-cp $SRCDIR/mkosi.output/rootfs.ero $BUILDROOT/

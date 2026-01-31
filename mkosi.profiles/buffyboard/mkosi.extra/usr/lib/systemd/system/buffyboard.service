@@ -1,8 +1,0 @@
-[Unit]
-After=rescue.service emergency.service
-DefaultDependencies=no
-
-[Service]
-ExecStartPre=sleep 3
-ExecStart=/usr/bin/buffyboard
-Restart=on-failure
