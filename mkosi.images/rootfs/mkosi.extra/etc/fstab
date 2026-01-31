@@ -1,0 +1,2 @@
+/dev/disk/by-partlabel/persist /var/lib/persist ext4 defaults,noatime 0 0
+/var/lib/persist/NetworkManager/system-connections /etc/NetworkManager/system-connections none bind 0 0
