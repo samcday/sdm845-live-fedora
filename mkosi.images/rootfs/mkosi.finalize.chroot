@@ -1,10 +1,6 @@
 #!/bin/bash
 set -uexo pipefail
 
-# Yeet firstboot service entirely, otherwise systemd.firstboot=false needs
-# to be added to kernel commandline.
-rm /usr/lib/systemd/system/systemd-firstboot.service
-
 selected_profiles=0
 if [[ "${PROFILES:-}" == *"embedded-firmware"* ]]; then
     selected_profiles=$((selected_profiles + 1))
