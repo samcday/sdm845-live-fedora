@@ -14,11 +14,11 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             erofs-utils \
             systemd-ukify
-      - uses: systemd/mkosi@v25.3
+      - uses: systemd/mkosi@v26
 
       - name: Build image
         run: |
-          mkosi -f --profile erofs-lzma,phosh,official-kernel,embedded-firmware
+          sudo mkosi -f --profile erofs-lz4,phosh,official-kernel,embedded-firmware
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
