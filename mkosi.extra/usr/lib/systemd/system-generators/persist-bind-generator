@@ -1,0 +1,70 @@
+#!/bin/bash
+set -eu
+
+generator_dir="${1:?missing generator dir}"
+persist_device="/dev/disk/by-partlabel/persist"
+
+if [[ ! -e "${persist_device}" ]]; then
+    exit 0
+fi
+
+# Create tmpfiles.d configuration for required directories
+tmpfiles_dir="/run/tmpfiles.d"
+mkdir -p "${tmpfiles_dir}"
+cat >"${tmpfiles_dir}/persist.conf" <<EOF
+d /var/lib/persist 0755 root root -
+d /var/lib/persist/NetworkManager 0755 root root -
+d /var/lib/persist/NetworkManager/system-connections 0700 root root -
+d /var/lib/persist/bluetooth 0700 root root -
+d /var/lib/bluetooth 0700 root root -
+d /etc/NetworkManager 0755 root root -
+d /etc/NetworkManager/system-connections 0700 root root -
+EOF
+
+persist_mount_unit="${generator_dir}/var-lib-persist.mount"
+cat >"${persist_mount_unit}" <<EOF
+[Unit]
+Description=Persistent storage mount
+DefaultDependencies=no
+Before=local-fs.target
+
+[Mount]
+What=${persist_device}
+Where=/var/lib/persist
+Type=ext4
+Options=defaults,noatime
+EOF
+
+nm_unit_name="$(systemd-escape --path --suffix=mount /etc/NetworkManager/system-connections)"
+nm_unit_path="${generator_dir}/${nm_unit_name}"
+cat >"${nm_unit_path}" <<EOF
+[Unit]
+Description=Persist NetworkManager system connections
+DefaultDependencies=no
+Requires=var-lib-persist.mount
+After=var-lib-persist.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/persist/NetworkManager/system-connections
+Where=/etc/NetworkManager/system-connections
+Type=none
+Options=bind
+EOF
+
+bt_unit_name="$(systemd-escape --path --suffix=mount /var/lib/bluetooth)"
+bt_unit_path="${generator_dir}/${bt_unit_name}"
+cat >"${bt_unit_path}" <<EOF
+[Unit]
+Description=Persist bluetooth state
+DefaultDependencies=no
+Requires=var-lib-persist.mount
+After=var-lib-persist.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/persist/bluetooth
+Where=/var/lib/bluetooth
+Type=none
+Options=bind
+EOF
