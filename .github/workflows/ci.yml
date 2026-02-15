@@ -41,12 +41,17 @@ jobs:
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
         run: |
           stamp="$(date -u +%Y%m%d)"
-          object_key="/live-pocket-fedora/${stamp}.ero"
-          aws s3 cp "mkosi.output/image.ero" "s3://${R2_BUCKET}${object_key}" --endpoint-url "${R2_ENDPOINT_URL}"
+          object_key="live-pocket-fedora/${stamp}.ero"
+          aws s3api put-object \
+            --bucket "${R2_BUCKET}" \
+            --key "${object_key}" \
+            --body "mkosi.output/image.ero" \
+            --content-type "application/octet-stream" \
+            --endpoint-url "${R2_ENDPOINT_URL}"
 
   pass:
     name: ✅ Pass
-    needs: [ build ]
+    needs: [ build, upload-ero ]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
