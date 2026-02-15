@@ -45,6 +45,7 @@ cat >"${nm_unit_path}" <<EOF
 [Unit]
 Description=Persist NetworkManager system connections
 DefaultDependencies=no
+ConditionPathIsMountPoint=/var/lib/persist
 Requires=var-lib-persist.mount
 After=var-lib-persist.mount
 Before=local-fs.target
@@ -63,6 +64,7 @@ cat >"${bt_unit_path}" <<EOF
 [Unit]
 Description=Persist bluetooth state
 DefaultDependencies=no
+ConditionPathIsMountPoint=/var/lib/persist
 Requires=var-lib-persist.mount
 After=var-lib-persist.mount
 Before=local-fs.target
