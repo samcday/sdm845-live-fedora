@@ -3,3 +3,4 @@ mkosi.output/
 mkosi.builddir/
 .terraform/
 *.tfstate.backup
+mkosi.tools*

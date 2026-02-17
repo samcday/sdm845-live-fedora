@@ -1,0 +1,120 @@
+#!/bin/bash
+set -uexo pipefail
+
+image_dir="$OUTPUTDIR/image"
+ostree_root="$OUTPUTDIR/ostree"
+repo_dir="$ostree_root/repo"
+sysroot_dir="$ostree_root/sysroot"
+tree_dir="$ostree_root/tree"
+sysroot_build_dir="$(mktemp -d "${TMPDIR:-/tmp}/mkosi-ostree-sysroot.XXXXXX")"
+sysroot_build_repo_dir="$sysroot_build_dir/ostree/repo"
+
+cleanup() {
+    if [[ -d "$tree_dir" ]]; then
+        chmod -R u+w "$tree_dir" 2>/dev/null || true
+        rm -rf "$tree_dir" 2>/dev/null || true
+    fi
+
+    if [[ -d "$sysroot_build_dir" ]]; then
+        chmod -R u+w "$sysroot_build_dir" 2>/dev/null || true
+        rm -rf "$sysroot_build_dir" 2>/dev/null || true
+    fi
+}
+
+trap cleanup EXIT
+
+release="${RELEASE:-}"
+architecture="${ARCHITECTURE:-}"
+
+if [[ -z "$release" || -z "$architecture" ]]; then
+    echo "RELEASE and ARCHITECTURE must be set by mkosi." >&2
+    exit 1
+fi
+
+ref="${OSTREE_REF:-live-pocket-fedora/${release}/${architecture}}"
+stateroot="${OSTREE_STATEROOT:-live-pocket-fedora}"
+
+if [[ ! -d "$image_dir" ]]; then
+    echo "Missing image tree at $image_dir." >&2
+    exit 1
+fi
+
+rm -rf "$ostree_root"
+mkdir -p "$repo_dir" "$sysroot_dir" "$tree_dir"
+
+cp -a --reflink=auto "$image_dir/." "$tree_dir/"
+
+if [[ -L "$tree_dir/etc" ]]; then
+    rm "$tree_dir/etc"
+elif [[ -d "$tree_dir/etc" ]]; then
+    mkdir -p "$tree_dir/usr"
+
+    if [[ -d "$tree_dir/usr/etc" ]]; then
+        cp -a "$tree_dir/etc/." "$tree_dir/usr/etc/"
+        rm -rf "$tree_dir/etc"
+    else
+        mv "$tree_dir/etc" "$tree_dir/usr/etc"
+    fi
+fi
+
+if [[ ! -d "$tree_dir/usr/etc" ]]; then
+    echo "OSTree tree must provide /usr/etc. Could not derive it from $image_dir." >&2
+    exit 1
+fi
+
+ostree init --repo="$repo_dir" --mode=archive
+ostree commit --repo="$repo_dir" --branch="$ref" --tree="dir=$tree_dir"
+
+commit="$(ostree --repo="$repo_dir" rev-parse "$ref")"
+printf '%s\n' "$ref" > "$ostree_root/ref.txt"
+printf '%s\n' "$commit" > "$ostree_root/commit.txt"
+
+ostree admin init-fs --modern "$sysroot_build_dir"
+ostree admin --sysroot="$sysroot_build_dir" stateroot-init "$stateroot"
+ostree --repo="$sysroot_build_repo_dir" config set sysroot.bootloader none
+ostree --repo="$sysroot_build_repo_dir" pull-local "$repo_dir" "$ref"
+ostree admin --sysroot="$sysroot_build_dir" deploy --stateroot="$stateroot" "$ref"
+
+shopt -s nullglob
+bls_entries=("$sysroot_build_dir"/boot/loader/entries/*.conf)
+if (( ${#bls_entries[@]} == 0 )); then
+    echo "No BLS entries found under $sysroot_build_dir/boot/loader/entries." >&2
+    exit 1
+fi
+
+ostree_karg=
+for bls_entry in "${bls_entries[@]}"; do
+    while IFS= read -r line; do
+        [[ "$line" == options* ]] || continue
+
+        for token in ${line#options }; do
+            if [[ "$token" == ostree=* ]]; then
+                ostree_karg="${token#ostree=}"
+                break 3
+            fi
+        done
+    done < "$bls_entry"
+done
+
+if [[ -z "$ostree_karg" ]]; then
+    echo "Unable to determine ostree= kernel argument payload." >&2
+    exit 1
+fi
+
+cp -a --reflink=auto "$sysroot_build_dir/." "$sysroot_dir/"
+
+printf '%s\n' "$ostree_karg" > "$ostree_root/ostree-karg.txt"
+
+cat > "$ostree_root/metadata.json" <<EOF
+{
+  "ref": "$ref",
+  "commit": "$commit",
+  "ostree_karg": "$ostree_karg",
+  "stateroot": "$stateroot",
+  "repo": "repo",
+  "sysroot": "sysroot",
+  "ref_file": "ref.txt",
+  "commit_file": "commit.txt",
+  "ostree_karg_file": "ostree-karg.txt"
+}
+EOF
