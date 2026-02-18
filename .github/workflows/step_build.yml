@@ -26,5 +26,3 @@ jobs:
           name: live-pocket-fedora
           path: |
             ./mkosi.output/ostree.ero
-            ./mkosi.output/ostree
-          if-no-files-found: error
