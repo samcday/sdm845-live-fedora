@@ -172,7 +172,11 @@ capture_store_snapshot "${LOCAL_STORE_DIR}" "${POST_SNAPSHOT_PATH}"
 
 REFERENCED_STORE_DIR="$(mktemp -d "${OUTPUT_DIR}/referenced-store.XXXXXX")"
 cleanup() {
-    rm -rf "${REFERENCED_STORE_DIR}"
+    if [[ "$(to_bool "${USE_SUDO_CASYNC_RAW}")" == "1" ]]; then
+        sudo rm -rf "${REFERENCED_STORE_DIR}" || true
+    else
+        rm -rf "${REFERENCED_STORE_DIR}" || true
+    fi
 }
 trap cleanup EXIT
 
