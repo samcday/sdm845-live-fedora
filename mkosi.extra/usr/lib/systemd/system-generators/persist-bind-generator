@@ -2,7 +2,15 @@
 set -eu
 
 generator_dir="${1:?missing generator dir}"
-persist_device="/dev/disk/by-partlabel/persist"
+persist_device=""
+
+if command -v blkid >/dev/null 2>&1; then
+    persist_device="$(blkid -o device -t PARTLABEL=persist 2>/dev/null | head -n 1 || true)"
+fi
+
+if [[ -z "${persist_device}" ]]; then
+    exit 0
+fi
 
 link_mount_to_local_fs() {
     local unit_name="${1:?missing unit name}"
