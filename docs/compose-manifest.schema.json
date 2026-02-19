@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://live-pocket-fedora/docs/compose-manifest.schema.json",
+  "title": "live-pocket-fedora compose manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "build",
+    "lineage",
+    "artifacts",
+    "provenance",
+    "publish"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "live-pocket-fedora.compose"
+    },
+    "build": {
+      "type": "object",
+      "required": [
+        "repository",
+        "event_name",
+        "commit",
+        "ref",
+        "run_id",
+        "run_attempt",
+        "timestamp_utc",
+        "build_id"
+      ],
+      "properties": {
+        "repository": { "type": "string" },
+        "workflow": { "type": "string" },
+        "workflow_ref": { "type": "string" },
+        "event_name": { "type": "string" },
+        "commit": { "type": "string" },
+        "ref": { "type": "string" },
+        "run_id": { "type": ["string", "integer"] },
+        "run_attempt": { "type": ["string", "integer"] },
+        "run_url": { "type": "string" },
+        "timestamp_utc": { "type": "string" },
+        "build_id": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["base_ref"],
+      "properties": {
+        "base_ref": { "type": "string" },
+        "base_manifest_s3": { "type": ["string", "null"] },
+        "base_manifest_url": { "type": ["string", "null"] },
+        "base_index_s3": { "type": ["string", "null"] },
+        "base_index_url": { "type": ["string", "null"] },
+        "base_commit": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["erofs_image", "casync_blob_index", "chunk_store"],
+      "properties": {
+        "erofs_image": {
+          "type": "object",
+          "required": ["path", "sha256", "digest", "size_bytes"],
+          "additionalProperties": true
+        },
+        "casync_blob_index": {
+          "type": "object",
+          "required": ["path", "sha256", "digest", "size_bytes"],
+          "additionalProperties": true
+        },
+        "chunk_store": {
+          "type": "object",
+          "required": [
+            "prefix",
+            "total_chunks",
+            "total_bytes",
+            "new_chunks",
+            "new_bytes",
+            "reused_chunks",
+            "reused_bytes"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["runner", "tools"],
+      "additionalProperties": true
+    },
+    "publish": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "bucket": { "type": ["string", "null"] },
+        "endpoint": { "type": ["string", "null"] },
+        "manifest_s3": { "type": ["string", "null"] },
+        "manifest_url": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

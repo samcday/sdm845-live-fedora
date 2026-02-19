@@ -20,6 +20,43 @@ jobs:
   build:
     name: 🔨 build
     uses: ./.github/workflows/step_build.yml
+    secrets: inherit
+
+  compose-coordinates:
+    name: 📦 compose coordinates
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report compose artifact coordinates
+        run: |
+          echo "compose_publish_enabled=${{ needs.build.outputs.compose_publish_enabled }}"
+          echo "compose_manifest_s3=${{ needs.build.outputs.compose_manifest_s3 }}"
+          echo "compose_manifest_url=${{ needs.build.outputs.compose_manifest_url }}"
+          echo "compose_index_s3=${{ needs.build.outputs.compose_index_s3 }}"
+          echo "compose_index_url=${{ needs.build.outputs.compose_index_url }}"
+          echo "compose_chunk_prefix_s3=${{ needs.build.outputs.compose_chunk_prefix_s3 }}"
+          echo "compose_chunk_prefix_url=${{ needs.build.outputs.compose_chunk_prefix_url }}"
+          echo "compose_image_s3=${{ needs.build.outputs.compose_image_s3 }}"
+          echo "compose_image_url=${{ needs.build.outputs.compose_image_url }}"
+          echo "compose_new_chunk_bytes=${{ needs.build.outputs.compose_new_chunk_bytes }}"
+          echo "compose_reused_chunk_bytes=${{ needs.build.outputs.compose_reused_chunk_bytes }}"
+          echo "build_artifact_url=${{ needs.build.outputs.build_artifact_url }}"
+
+          {
+            echo "### Compose coordinates"
+            echo ""
+            echo "- publish enabled: \`${{ needs.build.outputs.compose_publish_enabled }}\`"
+            echo "- manifest (s3): \`${{ needs.build.outputs.compose_manifest_s3 }}\`"
+            echo "- manifest (url): \`${{ needs.build.outputs.compose_manifest_url }}\`"
+            echo "- index (s3): \`${{ needs.build.outputs.compose_index_s3 }}\`"
+            echo "- index (url): \`${{ needs.build.outputs.compose_index_url }}\`"
+            echo "- chunk store (s3): \`${{ needs.build.outputs.compose_chunk_prefix_s3 }}\`"
+            echo "- chunk store (url): \`${{ needs.build.outputs.compose_chunk_prefix_url }}\`"
+            echo "- image (s3): \`${{ needs.build.outputs.compose_image_s3 }}\`"
+            echo "- image (url): \`${{ needs.build.outputs.compose_image_url }}\`"
+            echo "- dedupe bytes: new=${{ needs.build.outputs.compose_new_chunk_bytes }}, reused=${{ needs.build.outputs.compose_reused_chunk_bytes }}"
+            echo "- gha artifact: \`${{ needs.build.outputs.build_artifact_url }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   upload-ero:
     name: ☁️ upload .ero
@@ -51,7 +88,7 @@ jobs:
 
   pass:
     name: ✅ Pass
-    needs: [ build ]
+    needs: [ build, compose-coordinates ]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1

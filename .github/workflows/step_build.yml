@@ -1,19 +1,98 @@
 on:
   workflow_call:
+    outputs:
+      compose_manifest_s3:
+        description: S3 coordinate for compose manifest
+        value: ${{ jobs.build.outputs.compose_manifest_s3 }}
+      compose_manifest_url:
+        description: Public URL for compose manifest
+        value: ${{ jobs.build.outputs.compose_manifest_url }}
+      compose_index_s3:
+        description: S3 coordinate for compose index
+        value: ${{ jobs.build.outputs.compose_index_s3 }}
+      compose_index_url:
+        description: Public URL for compose index
+        value: ${{ jobs.build.outputs.compose_index_url }}
+      compose_chunk_prefix_s3:
+        description: S3 prefix for casync chunk store
+        value: ${{ jobs.build.outputs.compose_chunk_prefix_s3 }}
+      compose_chunk_prefix_url:
+        description: Public URL prefix for casync chunk store
+        value: ${{ jobs.build.outputs.compose_chunk_prefix_url }}
+      compose_image_s3:
+        description: S3 coordinate for canonical EROFS image
+        value: ${{ jobs.build.outputs.compose_image_s3 }}
+      compose_image_url:
+        description: Public URL for canonical EROFS image
+        value: ${{ jobs.build.outputs.compose_image_url }}
+      compose_publish_enabled:
+        description: Whether compose artifacts were published to object storage
+        value: ${{ jobs.build.outputs.compose_publish_enabled }}
+      compose_new_chunk_count:
+        description: Number of new chunks in this run
+        value: ${{ jobs.build.outputs.compose_new_chunk_count }}
+      compose_new_chunk_bytes:
+        description: Number of new chunk bytes in this run
+        value: ${{ jobs.build.outputs.compose_new_chunk_bytes }}
+      compose_reused_chunk_count:
+        description: Number of reused chunks in this run
+        value: ${{ jobs.build.outputs.compose_reused_chunk_count }}
+      compose_reused_chunk_bytes:
+        description: Number of reused chunk bytes in this run
+        value: ${{ jobs.build.outputs.compose_reused_chunk_bytes }}
+      compose_erofs_digest:
+        description: casync digest for source EROFS image
+        value: ${{ jobs.build.outputs.compose_erofs_digest }}
+      build_artifact_url:
+        description: GitHub artifact URL for build output bundle
+        value: ${{ jobs.build.outputs.build_artifact_url }}
 
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
+    outputs:
+      compose_manifest_s3: ${{ steps.compose.outputs.compose_manifest_s3 }}
+      compose_manifest_url: ${{ steps.compose.outputs.compose_manifest_url }}
+      compose_index_s3: ${{ steps.compose.outputs.compose_index_s3 }}
+      compose_index_url: ${{ steps.compose.outputs.compose_index_url }}
+      compose_chunk_prefix_s3: ${{ steps.compose.outputs.compose_chunk_prefix_s3 }}
+      compose_chunk_prefix_url: ${{ steps.compose.outputs.compose_chunk_prefix_url }}
+      compose_image_s3: ${{ steps.compose.outputs.compose_image_s3 }}
+      compose_image_url: ${{ steps.compose.outputs.compose_image_url }}
+      compose_publish_enabled: ${{ steps.compose.outputs.compose_publish_enabled }}
+      compose_new_chunk_count: ${{ steps.compose.outputs.compose_new_chunk_count }}
+      compose_new_chunk_bytes: ${{ steps.compose.outputs.compose_new_chunk_bytes }}
+      compose_reused_chunk_count: ${{ steps.compose.outputs.compose_reused_chunk_count }}
+      compose_reused_chunk_bytes: ${{ steps.compose.outputs.compose_reused_chunk_bytes }}
+      compose_erofs_digest: ${{ steps.compose.outputs.compose_erofs_digest }}
+      build_artifact_url: ${{ steps.upload_build_artifacts.outputs.artifact-url }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: install packages
+      - name: Install packages
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             erofs-utils \
-            systemd-ukify
+            systemd-ukify \
+            casync \
+            python3-pip
+
+          if ! command -v aws >/dev/null 2>&1; then
+            python3 -m pip install --user --break-system-packages awscli
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Restore casync chunk store cache
+        uses: actions/cache@v4
+        with:
+          path: .casync-cache/store.castr
+          key: casync-store-${{ runner.os }}-${{ runner.arch }}-${{ github.repository }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            casync-store-${{ runner.os }}-${{ runner.arch }}-${{ github.repository }}-${{ github.ref_name }}-
+            casync-store-${{ runner.os }}-${{ runner.arch }}-${{ github.repository }}-main-
+
       - uses: systemd/mkosi@v26
 
       - name: Build image
@@ -37,9 +116,62 @@ jobs:
             cp "${source_file}" "${target_file}"
           fi
 
+      - name: Build compose artifacts and validate casync integrity
+        id: compose
+        env:
+          COMPOSE_ENABLE_PUBLISH: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && secrets.R2_BUCKET != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_ENDPOINT_URL != '' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          COMPOSE_BUCKET: ${{ secrets.R2_BUCKET }}
+          COMPOSE_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          COMPOSE_PUBLIC_BASE_URL: https://bleeding.fastboop.win
+          COMPOSE_OBJECT_PREFIX: live-pocket-fedora
+          COMPOSE_LOCAL_STORE_DIR: .casync-cache/store.castr
+          COMPOSE_BASE_LINEAGE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+          COMPOSE_USE_SUDO: 1
+        run: ./scripts/casync-compose.sh
+
+      - name: Validate compose manifest shape
+        run: |
+          python3 - <<'PY'
+          import json
+
+          required = {
+              "schema_version",
+              "kind",
+              "build",
+              "lineage",
+              "artifacts",
+              "provenance",
+              "publish",
+          }
+
+          with open("mkosi.output/compose/compose-manifest.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          missing = sorted(required - set(data))
+          if missing:
+              raise SystemExit(f"compose-manifest.json missing keys: {missing}")
+
+          if data.get("schema_version") != 1:
+              raise SystemExit("compose-manifest.json schema_version must be 1")
+
+          if data.get("kind") != "live-pocket-fedora.compose":
+              raise SystemExit("compose-manifest.json kind must be live-pocket-fedora.compose")
+          PY
+
       - name: Upload build artifacts
+        id: upload_build_artifacts
         uses: actions/upload-artifact@v4
         with:
           name: live-pocket-fedora
           path: |
             ./mkosi.output/live-pocket-fedora.ero
+            ./mkosi.output/compose/compose-manifest.json
+            ./mkosi.output/compose/*.caibx
+            ./mkosi.output/compose/*.sha256
+            ./mkosi.output/compose/*.casync-digest
+            ./mkosi.output/compose/dedupe-stats.json
+            ./mkosi.output/compose/compose-latest-pointer.json
+          if-no-files-found: error
